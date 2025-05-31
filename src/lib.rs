@@ -12,6 +12,7 @@
 //! [METADATA_BLOCK_PICTURE](https://wiki.xiph.org/VorbisComment#Cover_art) proposal, which is supported by common players like ffmpeg and vlc.
 
 pub mod picture;
+pub mod utils;
 
 use ogg::{PacketReader, PacketWriteEndInfo, PacketWriter};
 use picture::{Picture, PictureError, PictureType};
@@ -22,6 +23,8 @@ use std::io::Cursor;
 use std::io::{Read, Seek, Write};
 use std::path::Path;
 use thiserror::Error;
+
+pub use utils::LowercaseString;
 
 /// Error type.
 ///
@@ -83,8 +86,9 @@ impl Tag {
             key.make_ascii_lowercase();
             comments_map
                 .entry(key)
-                .and_modify(|v: &mut Vec<String>| v.push(value.clone()))
-                .or_insert_with(|| vec![value]);
+                .or_insert_with(Vec::new)
+                .push(value)
+
         }
 
         Self {
@@ -94,41 +98,46 @@ impl Tag {
     }
 
     /// Add one entry.
-    pub fn add_one(&mut self, mut tag: String, value: String) {
-        tag.make_ascii_lowercase();
+    pub fn add_one(&mut self, tag: LowercaseString, value: String) {
         self.comments
-            .entry(tag)
-            .and_modify(|v: &mut Vec<String>| v.push(value.clone()))
-            .or_insert_with(|| vec![value]);
+            .entry(tag.0)
+            .or_insert_with(Vec::new)
+            .push(value);
     }
 
     /// Add multiple entries.
-    pub fn add_many(&mut self, mut tag: String, mut values: Vec<String>) {
-        tag.make_ascii_lowercase();
+    pub fn add_many(&mut self, tag: LowercaseString, mut values: Vec<String>) {
         self.comments
-            .entry(tag)
+            .entry(tag.0)
             .and_modify(|v: &mut Vec<String>| v.append(&mut values))
             .or_insert(values);
     }
 
     /// Get all entries for a particular key, or None if no occurrences of the key exist.
     #[must_use]
-    pub fn get(&self, mut tag: String) -> Option<&Vec<String>> {
-        tag.make_ascii_lowercase();
-        self.comments.get(&tag)
+    pub fn get(&self, tag: LowercaseString) -> Option<&Vec<String>> {
+        self.comments
+            .get(&tag.0)
     }
 
     /// Gets the first entry for a particular key, or None if no occurences of the key exist.
     #[must_use]
-    pub fn get_one(&self, tag: String) -> Option<&String> {
-        self.get(tag).and_then(|v| v.first())
+    pub fn get_one(&self, tag: LowercaseString) -> Option<&String> {
+        self.comments
+            .get(&tag.0)
+            .and_then(|v| v.first())
     }
 
     /// Remove all entries for a particular key. Optionally returns the removed values, if any.
-    pub fn remove_entries(&mut self, mut tag: String) -> Option<Vec<String>> {
-        tag.make_ascii_lowercase();
-        self.comments.remove(&tag)
+    pub fn remove_entries(&mut self, tag: LowercaseString) -> Option<Vec<String>> {
+        self.comments.remove(&tag.0)
     }
+
+    /// Remove all entries for a particular key, inserting the given values instead.
+    pub fn set_entries(&mut self, tag: LowercaseString, values: Vec<String>) -> Option<Vec<String>> {
+        self.comments.insert(tag.0, values)
+    }
+
 
     /// Gets the vendor string
     #[must_use]
@@ -148,7 +157,7 @@ impl Tag {
     pub fn add_picture(&mut self, picture: &Picture) -> Result<()> {
         let _ = self.remove_picture_type(picture.picture_type)?;
         let data = picture.to_base64()?;
-        self.add_one("METADATA_BLOCK_PICTURE".to_string(), data);
+        self.add_one("METADATA_BLOCK_PICTURE".into(), data);
         Ok(())
     }
 
