@@ -115,22 +115,22 @@ impl Tag {
 
     /// Get all entries for a particular key, or None if no occurrences of the key exist.
     #[must_use]
-    pub fn get(&self, tag: LowercaseString) -> Option<&Vec<String>> {
+    pub fn get(&self, tag: &LowercaseString) -> Option<&Vec<String>> {
         self.comments
-            .get(&tag.0)
+            .get(tag.0.as_str())
     }
 
     /// Gets the first entry for a particular key, or None if no occurences of the key exist.
     #[must_use]
-    pub fn get_one(&self, tag: LowercaseString) -> Option<&String> {
+    pub fn get_one(&self, tag: &LowercaseString) -> Option<&String> {
         self.comments
-            .get(&tag.0)
+            .get(tag.0.as_str())
             .and_then(|v| v.first())
     }
 
     /// Remove all entries for a particular key. Optionally returns the removed values, if any.
-    pub fn remove_entries(&mut self, tag: LowercaseString) -> Option<Vec<String>> {
-        self.comments.remove(&tag.0)
+    pub fn remove_entries(&mut self, tag: &LowercaseString) -> Option<Vec<String>> {
+        self.comments.remove(tag.0.as_str())
     }
 
     /// Remove all entries for a particular key, inserting the given values instead.
