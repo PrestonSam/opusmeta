@@ -12,7 +12,7 @@
 //! [METADATA_BLOCK_PICTURE](https://wiki.xiph.org/VorbisComment#Cover_art) proposal, which is supported by common players like ffmpeg and vlc.
 
 pub mod picture;
-pub mod utils;
+mod utils;
 
 use ogg::{PacketReader, PacketWriteEndInfo, PacketWriter};
 use picture::{Picture, PictureError, PictureType};
