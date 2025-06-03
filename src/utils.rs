@@ -1,5 +1,15 @@
+use std::ops::Deref;
+
 #[derive(Debug, Clone)]
-pub struct LowercaseString(pub String);
+pub struct LowercaseString(pub(crate) String);
+
+impl Deref for LowercaseString {
+    type Target = str;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
 
 impl LowercaseString {
     #[must_use]
