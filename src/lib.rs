@@ -53,7 +53,9 @@ pub enum Error {
     MalformedComment(String),
     /// Expected valid UTF-8 data as mandated by the spec, but did not receive it. The underlying
     /// `FromUtf8Error` provides the offending bytes for conveniece.
-    #[error("Expected valid UTF-8, but did not receive it. See the contained FromUtf8Error for the offending bytes.")]
+    #[error(
+        "Expected valid UTF-8, but did not receive it. See the contained FromUtf8Error for the offending bytes."
+    )]
     UTFError(#[from] std::string::FromUtf8Error),
     /// The content was too big for the opus spec (e.g. is more than [`u32::MAX`] bytes long). Since
     /// [`u32::MAX`] bytes is almost 4.3 GB, this error should almost never occur.
@@ -84,11 +86,7 @@ impl Tag {
         let mut comments_map = HashMap::new();
         for (mut key, value) in comments {
             key.make_ascii_lowercase();
-            comments_map
-                .entry(key)
-                .or_insert_with(Vec::new)
-                .push(value)
-
+            comments_map.entry(key).or_insert_with(Vec::new).push(value);
         }
 
         Self {
@@ -99,10 +97,7 @@ impl Tag {
 
     /// Add one entry.
     pub fn add_one(&mut self, tag: LowercaseString, value: String) {
-        self.comments
-            .entry(tag.0)
-            .or_insert_with(Vec::new)
-            .push(value);
+        self.comments.entry(tag.0).or_default().push(value);
     }
 
     /// Add multiple entries.
@@ -116,16 +111,13 @@ impl Tag {
     /// Get all entries for a particular key, or None if no occurrences of the key exist.
     #[must_use]
     pub fn get(&self, tag: &LowercaseString) -> Option<&Vec<String>> {
-        self.comments
-            .get(tag.0.as_str())
+        self.comments.get(tag.0.as_str())
     }
 
     /// Gets the first entry for a particular key, or None if no occurences of the key exist.
     #[must_use]
     pub fn get_one(&self, tag: &LowercaseString) -> Option<&String> {
-        self.comments
-            .get(tag.0.as_str())
-            .and_then(|v| v.first())
+        self.comments.get(tag.0.as_str()).and_then(|v| v.first())
     }
 
     /// Remove all entries for a particular key. Optionally returns the removed values, if any.
@@ -134,10 +126,13 @@ impl Tag {
     }
 
     /// Remove all entries for a particular key, inserting the given values instead.
-    pub fn set_entries(&mut self, tag: LowercaseString, values: Vec<String>) -> Option<Vec<String>> {
+    pub fn set_entries(
+        &mut self,
+        tag: LowercaseString,
+        values: Vec<String>,
+    ) -> Option<Vec<String>> {
         self.comments.insert(tag.0, values)
     }
-
 
     /// Gets the vendor string
     #[must_use]
@@ -219,8 +214,7 @@ impl Tag {
     /// Read a `Tag` from a reader.
     /// # Errors
     /// This function can error if:
-    /// - The ogg stream is shorter than expected (e.g. doesn't include the first or second
-    ///     packets)
+    /// - The ogg stream is shorter than expected (e.g. doesn't include the first or second packets)
     /// - The given reader is not an opus stream
     /// - The comment header does not include the magic signature
     /// - The comment header is shorter than mandated by the spec
@@ -258,7 +252,7 @@ impl Tag {
             let pair = comment
                 .split_once('=')
                 .map(|(tag, value)| (tag.to_string(), value.to_string()))
-                .ok_or_else(|| Error::MalformedComment(comment))?;
+                .ok_or(Error::MalformedComment(comment))?;
             comments.push(pair);
         }
         Ok(Self::new(vendor, comments))
@@ -278,10 +272,9 @@ impl Tag {
     /// # Errors
     /// This function will error if:
     /// - No opus stream exists in the target
-    /// - The ogg stream is shorter than expected (e.g. doesn't include the first or second
-    ///     packets)
+    /// - The ogg stream is shorter than expected (e.g. doesn't include the first or second packets)
     /// - A comment in this Tag object is too big for the opus spec (some string is longer than [`u32::MAX`] bytes,
-    ///     or the object contains more than [`u32::MAX`] comments)
+    ///   or the object contains more than [`u32::MAX`] comments)
     /// - An unspecified error occurs while reading ogg packets from the target
     /// - An error occurs while writing an ogg packet to the target
     /// - An error occurs while seeking through the target
