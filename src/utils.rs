@@ -1,5 +1,6 @@
 use std::ops::Deref;
 
+/// A lowercase String. Holds a [`String`] internally.
 #[derive(Debug, Clone)]
 pub struct LowercaseString(pub(crate) String);
 
@@ -12,6 +13,8 @@ impl Deref for LowercaseString {
 }
 
 impl LowercaseString {
+    /// Create a new `LowercaseString`. This will copy the contents of the argument to a newly
+    /// allocated buffer.
     #[must_use]
     pub fn new(str: &str) -> Self {
         Self(str.to_ascii_lowercase())
