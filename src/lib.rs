@@ -198,17 +198,10 @@ impl Tag {
     /// improperly.
     #[must_use]
     pub fn pictures(&self) -> Vec<Picture> {
-        let Some(pictures_raw) = self.comments.get(PICTURE_BLOCK_TAG) else {
-            return vec![];
-        };
-        let mut output = vec![];
-        for picture in pictures_raw {
-            if let Ok(decoded) = Picture::from_base64(picture) {
-                output.push(decoded);
-            }
+        match self.iter_pictures() {
+            Some(iter) => iter.flat_map(Result::ok).collect(),
+            None => vec![],
         }
-
-        output
     }
 }
 
