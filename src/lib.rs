@@ -72,6 +72,8 @@ pub enum Error {
 
 pub type Result<T> = std::result::Result<T, Error>;
 
+const PICTURE_BLOCK_TAG: &str = "metadata_block_picture";
+
 /// Stores Opus comments.
 #[derive(Debug, Default)]
 pub struct Tag {
@@ -152,7 +154,7 @@ impl Tag {
     pub fn add_picture(&mut self, picture: &Picture) -> Result<()> {
         let _ = self.remove_picture_type(picture.picture_type)?;
         let data = picture.to_base64()?;
-        self.add_one("METADATA_BLOCK_PICTURE".into(), data);
+        self.add_one(PICTURE_BLOCK_TAG.into(), data);
         Ok(())
     }
 
@@ -161,7 +163,7 @@ impl Tag {
     /// Although rare, this function can error if a picture with the given type is not found AND
     /// the first picture in the set is not decoded properly.
     pub fn remove_picture_type(&mut self, picture_type: PictureType) -> Result<Option<Picture>> {
-        let Some(pictures) = self.comments.get_mut("metadata_block_picture") else {
+        let Some(pictures) = self.comments.get_mut(PICTURE_BLOCK_TAG) else {
             return Ok(None);
         };
         let mut index_to_remove = 0;
@@ -180,7 +182,7 @@ impl Tag {
     /// type.
     #[must_use]
     pub fn get_picture_type(&self, picture_type: PictureType) -> Option<Picture> {
-        let pictures = self.comments.get("metadata_block_picture")?;
+        let pictures = self.comments.get(PICTURE_BLOCK_TAG)?;
         for picture in pictures {
             if let Ok(decoded) = Picture::from_base64(picture) {
                 if decoded.picture_type == picture_type {
@@ -196,7 +198,7 @@ impl Tag {
     /// improperly.
     #[must_use]
     pub fn pictures(&self) -> Vec<Picture> {
-        let Some(pictures_raw) = self.comments.get("metadata_block_picture") else {
+        let Some(pictures_raw) = self.comments.get(PICTURE_BLOCK_TAG) else {
             return vec![];
         };
         let mut output = vec![];
@@ -366,6 +368,68 @@ impl Tag {
         Ok(output)
     }
 }
+
+type CommentHashIter<'a> = std::collections::hash_map::Iter<'a, String, Vec<String>>;
+
+type CommentsExceptPicturesIter<'a> = std::iter::Filter<CommentHashIter<'a>, fn(&(&String, &Vec<String>)) -> bool>;
+
+pub struct CommentsIterator<'a> {
+    comments_iter: CommentsExceptPicturesIter<'a>,
+}
+
+impl<'a> Iterator for CommentsIterator<'a> {
+    type Item = (&'a str, Vec<&'a str>);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.comments_iter
+            .next()
+            .map(|(key, vals)| {
+                let key = key.as_ref();
+                let values = vals.iter().map(AsRef::as_ref).collect();
+
+                (key, values)
+            })
+    }
+}
+
+pub struct PicturesIterator<'a> {
+    pictures_iter: core::slice::Iter<'a, String>,
+}
+
+impl Iterator for PicturesIterator<'_> {
+    type Item = Result<Picture>;
+    
+    fn next(&mut self) -> Option<Self::Item> {
+        self.pictures_iter
+            .next()
+            .map(|s| Picture::from_base64(s))
+    }
+}
+
+impl Tag {
+    #[must_use]
+    pub fn iter_comments(&self) -> CommentsIterator {
+        CommentsIterator {
+            comments_iter: self.comments
+                .iter()
+                .filter(|c| c.0 != PICTURE_BLOCK_TAG)
+        }
+    }
+
+    #[must_use]
+    pub fn iter_pictures(&self) -> Option<PicturesIterator> {
+        self.comments
+            .get(PICTURE_BLOCK_TAG)
+            .map(|pict_vec| PicturesIterator { pictures_iter: pict_vec.iter() })
+    }
+
+    pub fn keys(&self) -> impl Iterator<Item = &str> {
+        self.comments
+            .keys()
+            .map(AsRef::as_ref)
+    }
+}
+
 
 fn get_end_info(packet: &ogg::Packet) -> PacketWriteEndInfo {
     if packet.last_in_stream() {
