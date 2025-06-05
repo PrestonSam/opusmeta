@@ -194,12 +194,18 @@ impl Tag {
         None
     }
 
+    /// Returns whether any pictures are stored within the opus file.
+    #[must_use]
+    pub fn has_pictures(&self) -> bool {
+        self.comments.contains_key(PICTURE_BLOCK_TAG)
+    }
+
     /// Returns a Vec of all encoded pictures. This function will skip pictures that are encoded
     /// improperly.
     #[must_use]
     pub fn pictures(&self) -> Vec<Picture> {
         match self.iter_pictures() {
-            Some(iter) => iter.flat_map(Result::ok).collect(),
+            Some(iter) => iter.filter_map(Result::ok).collect(),
             None => vec![],
         }
     }
@@ -366,6 +372,9 @@ type CommentHashIter<'a> = std::collections::hash_map::Iter<'a, String, Vec<Stri
 
 type CommentsExceptPicturesIter<'a> = std::iter::Filter<CommentHashIter<'a>, fn(&(&String, &Vec<String>)) -> bool>;
 
+/// An iterator over the comments of an opus file, excluding the picture block comment.
+/// The iterator Item is `(&'a str, Vec<&'a str>)`.
+/// The iterator immutably borrows the opus file.
 pub struct CommentsIterator<'a> {
     comments_iter: CommentsExceptPicturesIter<'a>,
 }
@@ -385,6 +394,9 @@ impl<'a> Iterator for CommentsIterator<'a> {
     }
 }
 
+/// An iterator over the images embedded in an opus file.
+/// The iterator Item is `Result<Picture>`, containing an `Error` should the given image fail to decode.
+/// The iterator immutably borrows the opus file.
 pub struct PicturesIterator<'a> {
     pictures_iter: core::slice::Iter<'a, String>,
 }
@@ -400,6 +412,9 @@ impl Iterator for PicturesIterator<'_> {
 }
 
 impl Tag {
+    /// An iterator over the comments of an opus file, excluding the picture block comment.
+    /// The iterator Item is `(&'a str, &'a Vec<&str>)`.
+    /// The iterator immutably borrows the opus file.
     #[must_use]
     pub fn iter_comments(&self) -> CommentsIterator {
         CommentsIterator {
@@ -409,6 +424,9 @@ impl Tag {
         }
     }
 
+    /// An iterator over the images embedded in an opus file.
+    /// The iterator Item is `Result<Picture>`, containing an `Error` should the given image fail to decode.
+    /// The iterator immutably borrows the opus file.
     #[must_use]
     pub fn iter_pictures(&self) -> Option<PicturesIterator> {
         self.comments
@@ -416,9 +434,15 @@ impl Tag {
             .map(|pict_vec| PicturesIterator { pictures_iter: pict_vec.iter() })
     }
 
+    /// An iterator over the comment keys of an opus file, excluding the picture block key.
+    /// The iterator Item is `&'a str`.
+    /// The iterator immutably borrows the opus file.
+    /// 
+    /// To check whether the picture block tag is present, see [`has_pictures`](Tag::has_pictures).
     pub fn keys(&self) -> impl Iterator<Item = &str> {
         self.comments
             .keys()
+            .filter(|k| *k != PICTURE_BLOCK_TAG)
             .map(AsRef::as_ref)
     }
 }
