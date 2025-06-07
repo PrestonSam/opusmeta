@@ -370,11 +370,13 @@ impl Tag {
 
 type CommentHashIter<'a> = std::collections::hash_map::Iter<'a, String, Vec<String>>;
 
-type CommentsExceptPicturesIter<'a> = std::iter::Filter<CommentHashIter<'a>, fn(&(&String, &Vec<String>)) -> bool>;
+type CommentsExceptPicturesIter<'a> =
+    std::iter::Filter<CommentHashIter<'a>, fn(&(&String, &Vec<String>)) -> bool>;
 
-/// An iterator over the comments of an opus file, excluding the picture block comment.
-/// The iterator Item is `(&'a str, Vec<&'a str>)`.
-/// The iterator immutably borrows the opus file.
+/// An iterator over the comments of an opus file, excluding pictures.
+///
+/// The iterator's Item is `(&'a str, Vec<&'a str>)`.
+/// This iterator immutably borrows the tags stored in the [`Tag`] struct.
 pub struct CommentsIterator<'a> {
     comments_iter: CommentsExceptPicturesIter<'a>,
 }
@@ -383,62 +385,59 @@ impl<'a> Iterator for CommentsIterator<'a> {
     type Item = (&'a str, Vec<&'a str>);
 
     fn next(&mut self) -> Option<Self::Item> {
-        self.comments_iter
-            .next()
-            .map(|(key, vals)| {
-                let key = key.as_ref();
-                let values = vals.iter().map(AsRef::as_ref).collect();
+        self.comments_iter.next().map(|(key, vals)| {
+            let key = key.as_ref();
+            let values = vals.iter().map(AsRef::as_ref).collect();
 
-                (key, values)
-            })
+            (key, values)
+        })
     }
 }
 
-/// An iterator over the images embedded in an opus file.
+/// An iterator over the pictures stored in the comments.
+///
 /// The iterator Item is `Result<Picture>`, containing an `Error` should the given image fail to decode.
-/// The iterator immutably borrows the opus file.
+/// This iterator immutably borrows the tags stored in the [`Tag`] struct.
 pub struct PicturesIterator<'a> {
     pictures_iter: core::slice::Iter<'a, String>,
 }
 
 impl Iterator for PicturesIterator<'_> {
     type Item = Result<Picture>;
-    
+
     fn next(&mut self) -> Option<Self::Item> {
-        self.pictures_iter
-            .next()
-            .map(|s| Picture::from_base64(s))
+        self.pictures_iter.next().map(|s| Picture::from_base64(s))
     }
 }
 
 impl Tag {
-    /// An iterator over the comments of an opus file, excluding the picture block comment.
-    /// The iterator Item is `(&'a str, &'a Vec<&str>)`.
-    /// The iterator immutably borrows the opus file.
+    /// An iterator over the comments of an opus file, excluding pictures.
+    ///
+    /// See [`CommentsIterator`] for more info.
     #[must_use]
     pub fn iter_comments(&self) -> CommentsIterator {
         CommentsIterator {
-            comments_iter: self.comments
-                .iter()
-                .filter(|c| c.0 != PICTURE_BLOCK_TAG)
+            comments_iter: self.comments.iter().filter(|c| c.0 != PICTURE_BLOCK_TAG),
         }
     }
 
     /// An iterator over the images embedded in an opus file.
-    /// The iterator Item is `Result<Picture>`, containing an `Error` should the given image fail to decode.
-    /// The iterator immutably borrows the opus file.
+    ///
+    /// See [`PicturesIterator`] for more info.
     #[must_use]
     pub fn iter_pictures(&self) -> Option<PicturesIterator> {
         self.comments
             .get(PICTURE_BLOCK_TAG)
-            .map(|pict_vec| PicturesIterator { pictures_iter: pict_vec.iter() })
+            .map(|pict_vec| PicturesIterator {
+                pictures_iter: pict_vec.iter(),
+            })
     }
 
     /// An iterator over the comment keys of an opus file, excluding the picture block key.
+    ///
     /// The iterator Item is `&'a str`.
-    /// The iterator immutably borrows the opus file.
-    /// 
-    /// To check whether the picture block tag is present, see [`has_pictures`](Tag::has_pictures).
+    /// This iterator immutably borrows the tags stored in the [`Tag`] struct.
+    /// To check whether the set of tags contains pictures, see [`has_pictures`](Tag::has_pictures).
     pub fn keys(&self) -> impl Iterator<Item = &str> {
         self.comments
             .keys()
@@ -446,7 +445,6 @@ impl Tag {
             .map(AsRef::as_ref)
     }
 }
-
 
 fn get_end_info(packet: &ogg::Packet) -> PacketWriteEndInfo {
     if packet.last_in_stream() {
