@@ -11,9 +11,11 @@
 //! For reading and writing picture data, opusmeta uses the
 //! [METADATA_BLOCK_PICTURE](https://wiki.xiph.org/VorbisComment#Cover_art) proposal, which is supported by common players like ffmpeg and vlc.
 
+pub mod iter;
 pub mod picture;
 mod utils;
 
+use iter::{CommentsIterator, PicturesIterator};
 use ogg::{PacketReader, PacketWriteEndInfo, PacketWriter};
 use picture::{Picture, PictureError, PictureType};
 use std::collections::HashMap;
@@ -71,6 +73,8 @@ pub enum Error {
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
+
+const PICTURE_BLOCK_TAG: &str = "metadata_block_picture";
 
 /// Stores Opus comments.
 #[derive(Debug, Default)]
@@ -152,7 +156,7 @@ impl Tag {
     pub fn add_picture(&mut self, picture: &Picture) -> Result<()> {
         let _ = self.remove_picture_type(picture.picture_type)?;
         let data = picture.to_base64()?;
-        self.add_one("METADATA_BLOCK_PICTURE".into(), data);
+        self.add_one(PICTURE_BLOCK_TAG.into(), data);
         Ok(())
     }
 
@@ -161,7 +165,7 @@ impl Tag {
     /// Although rare, this function can error if a picture with the given type is not found AND
     /// the first picture in the set is not decoded properly.
     pub fn remove_picture_type(&mut self, picture_type: PictureType) -> Result<Option<Picture>> {
-        let Some(pictures) = self.comments.get_mut("metadata_block_picture") else {
+        let Some(pictures) = self.comments.get_mut(PICTURE_BLOCK_TAG) else {
             return Ok(None);
         };
         let mut index_to_remove = 0;
@@ -180,7 +184,7 @@ impl Tag {
     /// type.
     #[must_use]
     pub fn get_picture_type(&self, picture_type: PictureType) -> Option<Picture> {
-        let pictures = self.comments.get("metadata_block_picture")?;
+        let pictures = self.comments.get(PICTURE_BLOCK_TAG)?;
         for picture in pictures {
             if let Ok(decoded) = Picture::from_base64(picture) {
                 if decoded.picture_type == picture_type {
@@ -192,21 +196,20 @@ impl Tag {
         None
     }
 
+    /// Returns whether any pictures are stored within the opus file.
+    #[must_use]
+    pub fn has_pictures(&self) -> bool {
+        self.comments.contains_key(PICTURE_BLOCK_TAG)
+    }
+
     /// Returns a Vec of all encoded pictures. This function will skip pictures that are encoded
     /// improperly.
     #[must_use]
     pub fn pictures(&self) -> Vec<Picture> {
-        let Some(pictures_raw) = self.comments.get("metadata_block_picture") else {
-            return vec![];
-        };
-        let mut output = vec![];
-        for picture in pictures_raw {
-            if let Ok(decoded) = Picture::from_base64(picture) {
-                output.push(decoded);
-            }
+        match self.iter_pictures() {
+            Some(iter) => iter.filter_map(Result::ok).collect(),
+            None => vec![],
         }
-
-        output
     }
 }
 
@@ -364,6 +367,42 @@ impl Tag {
         }
 
         Ok(output)
+    }
+}
+
+impl Tag {
+    /// An iterator over the comments of an opus file, excluding pictures.
+    ///
+    /// See [`CommentsIterator`] for more info.
+    #[must_use]
+    pub fn iter_comments(&self) -> CommentsIterator {
+        CommentsIterator {
+            comments_iter: self.comments.iter().filter(|c| c.0 != PICTURE_BLOCK_TAG),
+        }
+    }
+
+    /// An iterator over the images embedded in an opus file.
+    ///
+    /// See [`PicturesIterator`] for more info.
+    #[must_use]
+    pub fn iter_pictures(&self) -> Option<PicturesIterator> {
+        self.comments
+            .get(PICTURE_BLOCK_TAG)
+            .map(|pict_vec| PicturesIterator {
+                pictures_iter: pict_vec.iter(),
+            })
+    }
+
+    /// An iterator over the comment keys of an opus file, excluding the picture block key.
+    ///
+    /// The iterator Item is `&'a str`.
+    /// This iterator immutably borrows the tags stored in the [`Tag`] struct.
+    /// To check whether the set of tags contains pictures, see [`has_pictures`](Tag::has_pictures).
+    pub fn keys(&self) -> impl Iterator<Item = &str> {
+        self.comments
+            .keys()
+            .filter(|k| *k != PICTURE_BLOCK_TAG)
+            .map(AsRef::as_ref)
     }
 }
 
